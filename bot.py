@@ -17,6 +17,7 @@ from aiogram.types import (
     InlineKeyboardButton,
     WebAppInfo,
     CallbackQuery,
+    MenuButtonWebApp,
 )
 
 from aiohttp import web
@@ -179,13 +180,8 @@ async def hourly_broadcast_loop() -> None:
                 quiet_end = user["quiet_end"]
                 if _is_quiet_now(quiet_start, quiet_end, now_time):
                     continue
-                progress = db.calc_progress(user["user_id"])
                 quote = random.choice(quotes.GOGGINS_QUOTES)
-                text = (
-                    f"{quote}\n\n"
-                    f"Твой текущий прогресс: <b>{progress}%</b>\n"
-                    f"Открой план и закрой ещё одну задачу."
-                )
+                text = quote
                 try:
                     await bot.send_message(user["user_id"], text)
                 except Exception as exc:
@@ -271,8 +267,15 @@ async def run_web_server() -> None:
         await asyncio.sleep(3600)
 
 
+async def setup_menu_button() -> None:
+    await bot.set_chat_menu_button(
+        menu_button=MenuButtonWebApp(text="Открыть", web_app=WebAppInfo(url=WEBAPP_URL))
+    )
+
+
 async def main() -> None:
     db.init_db()
+    await setup_menu_button()
     await asyncio.gather(
         dp.start_polling(bot),
         run_web_server(),
