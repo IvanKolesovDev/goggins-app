@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Жёсткий Наставник</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Manrope', 'sans-serif'],
+        },
+        colors: {
+          base: {
+            900: '#0d0d0f',
+            800: '#18181b',
+            700: '#232326',
+          },
+        },
+        boxShadow: {
+          glow: '0 0 40px -8px rgba(16, 185, 129, 0.45)',
+        },
+      },
+    },
+  };
+</script>
+<style>
+  html, body {
+    background-color: #0d0d0f;
+    font-family: 'Manrope', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+  .glass {
+    background: rgba(35, 35, 38, 0.55);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .glass-strong {
+    background: rgba(24, 24, 27, 0.75);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .ring-progress {
+    transition: stroke-dashoffset 0.8s cubic-bezier(0.65, 0, 0.35, 1);
+  }
+  .fade-in {
+    animation: fadeIn 0.35s ease both;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .tab-active {
+    color: #10b981;
+  }
+  .tab-indicator {
+    transition: transform 0.3s cubic-bezier(0.65, 0, 0.35, 1);
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.6;
+  }
+  ::-webkit-scrollbar { display: none; }
+  * { scrollbar-width: none; }
+</style>
+</head>
+<body class="min-h-screen text-zinc-100 pb-28">
+
+  <div id="app" class="max-w-md mx-auto px-4 pt-6">
+
+    <!-- HOME SCREEN -->
+    <section id="screen-home" class="fade-in">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <p class="text-xs uppercase tracking-widest text-zinc-500 font-semibold">Твоя цель</p>
+          <h1 id="goal-title" contenteditable="true" spellcheck="false"
+              class="text-xl font-extrabold text-white mt-1 outline-none focus:text-emerald-400 transition-colors max-w-[220px] break-words">
+            Моя главная цель
+          </h1>
+        </div>
+        <div class="w-10 h-10 rounded-full glass flex items-center justify-center text-emerald-400 font-bold text-sm">
+          🔥
+        </div>
+      </div>
+
+      <div class="glass-strong rounded-3xl p-8 flex flex-col items-center shadow-glow">
+        <div class="relative w-56 h-56">
+          <svg viewBox="0 0 200 200" class="w-full h-full -rotate-90">
+            <circle cx="100" cy="100" r="88" fill="none" stroke="#232326" stroke-width="14" />
+            <circle id="progress-ring" cx="100" cy="100" r="88" fill="none" stroke="#10b981"
+                    stroke-width="14" stroke-linecap="round"
+                    stroke-dasharray="553" stroke-dashoffset="553" class="ring-progress" />
+          </svg>
+          <div class="absolute inset-0 flex flex-col items-center justify-center">
+            <span id="progress-number" class="text-5xl font-extrabold text-white">0%</span>
+            <span class="text-xs text-zinc-500 font-semibold mt-1 uppercase tracking-wider">Прогресс</span>
+          </div>
+        </div>
+        <p id="motivation-line" class="text-center text-sm text-zinc-400 mt-6 leading-relaxed px-2">
+          Никаких оправданий. Открой план и закрой задачу прямо сейчас.
+        </p>
+      </div>
+
+      <div class="mt-5 glass rounded-2xl p-5 relative overflow-hidden">
+        <div class="absolute inset-0 backdrop-blur-sm bg-base-900/40"></div>
+        <div class="relative flex items-center justify-between">
+          <div>
+            <p class="text-sm font-bold text-zinc-300 flex items-center gap-2">
+              <span>🔒</span> Дополнительные цели
+            </p>
+            <p class="text-xs text-zinc-500 mt-1">Доступно в PRO-подписке</p>
+          </div>
+          <button class="text-xs font-bold px-3 py-2 rounded-xl bg-zinc-700/60 text-zinc-400 cursor-not-allowed">
+            Скоро
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- PLAN SCREEN -->
+    <section id="screen-plan" class="hidden fade-in">
+      <div class="flex items-center justify-between mb-5">
+        <h1 class="text-xl font-extrabold text-white">План</h1>
+        <button id="btn-add-task"
+                class="w-10 h-10 rounded-full bg-emerald-500 text-base-900 font-extrabold text-xl flex items-center justify-center active:scale-90 transition-transform shadow-glow">
+          +
+        </button>
+      </div>
+
+      <div id="task-list" class="flex flex-col gap-3"></div>
+
+      <div id="empty-state" class="hidden text-center py-16">
+        <p class="text-4xl mb-3">💤</p>
+        <p class="text-zinc-500 text-sm">Задач пока нет. Пока ты бездействуешь — время уходит.</p>
+      </div>
+    </section>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto px-4 pb-5 pt-2">
+    <div class="glass-strong rounded-2xl flex items-center justify-around py-3 relative">
+      <button data-screen="home" class="nav-btn tab-active flex flex-col items-center gap-1 w-1/2 text-xs font-bold">
+        <span class="text-lg">🏠</span> Главная
+      </button>
+      <button data-screen="plan" class="nav-btn flex flex-col items-center gap-1 w-1/2 text-xs font-bold text-zinc-500">
+        <span class="text-lg">✅</span> План
+      </button>
+    </div>
+  </nav>
+
+  <!-- ADD TASK MODAL -->
+  <div id="modal-task" class="hidden fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm">
+    <div class="glass-strong w-full max-w-md rounded-t-3xl p-6 pb-8 fade-in">
+      <div class="w-10 h-1.5 bg-zinc-600 rounded-full mx-auto mb-5"></div>
+      <h2 class="text-lg font-bold text-white mb-4">Новая задача</h2>
+
+      <label class="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Название</label>
+      <input id="input-task-title" type="text" placeholder="Что нужно сделать?"
+             class="w-full mt-2 mb-4 bg-base-700/60 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-zinc-500 outline-none focus:border-emerald-500" />
+
+      <label class="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Дедлайн</label>
+      <input id="input-task-deadline" type="date"
+             class="w-full mt-2 mb-4 bg-base-700/60 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-emerald-500" />
+
+      <label class="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Приоритет</label>
+      <div class="flex gap-3 mt-2 mb-6">
+        <button data-priority="important" class="priority-btn flex-1 py-3 rounded-xl border border-red-500/40 text-red-400 font-bold text-sm bg-red-500/10">
+          Важно
+        </button>
+        <button data-priority="secondary" class="priority-btn flex-1 py-3 rounded-xl border border-sky-500/40 text-sky-400 font-bold text-sm">
+          Второстепенно
+        </button>
+      </div>
+
+      <div class="flex gap-3">
+        <button id="btn-cancel-task" class="flex-1 py-3 rounded-xl bg-zinc-700/60 text-zinc-300 font-bold text-sm">Отмена</button>
+        <button id="btn-save-task" class="flex-1 py-3 rounded-xl bg-emerald-500 text-base-900 font-extrabold text-sm shadow-glow">Добавить</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
