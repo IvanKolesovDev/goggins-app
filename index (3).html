@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Наставник</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Manrope', 'sans-serif'] },
+        colors: {
+          base: { 900: '#000000', 800: '#141416', 700: '#1c1c1f' },
+        },
+        boxShadow: { glow: '0 0 40px -8px rgba(16, 185, 129, 0.4)' },
+      },
+    },
+  };
+</script>
+<style>
+  html, body {
+    background-color: #000000;
+    font-family: 'Manrope', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+  .glass {
+    background: rgba(28, 28, 31, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+  }
+  .glass-strong {
+    background: rgba(20, 20, 22, 0.9);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .ring-progress { transition: stroke-dashoffset 0.8s cubic-bezier(0.65, 0, 0.35, 1); }
+  .fade-in { animation: fadeIn 0.3s ease both; }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .nav-active { background: rgba(16, 185, 129, 0.14); color: #10b981; }
+  .nav-idle { color: #6b7280; }
+  .badge-pulse { animation: badgePulse 2.2s ease-in-out infinite; }
+  @keyframes badgePulse {
+    0%, 100% { box-shadow: 0 0 8px rgba(16,185,129,0.35), 0 0 0px rgba(16,185,129,0); }
+    50% { box-shadow: 0 0 22px rgba(16,185,129,0.9), 0 0 40px rgba(16,185,129,0.25); }
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.6; }
+  ::-webkit-scrollbar { display: none; }
+  * { scrollbar-width: none; }
+  .icon { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  select.status-select { appearance: none; -webkit-appearance: none; background-image: none; }
+</style>
+</head>
+<body class="min-h-screen text-zinc-100 pb-28">
+
+  <div id="app" class="max-w-md mx-auto px-4 pt-6">
+
+    <!-- TOP BAR -->
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-2">
+        <span class="text-lg font-extrabold text-white">Наставник</span>
+        <svg class="icon" style="width:16px;height:16px;stroke:#10b981" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+      </div>
+      <button id="btn-settings" class="w-9 h-9 rounded-full glass flex items-center justify-center text-zinc-400">
+        <svg class="icon" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.36.24.8.38 1.27.38H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- STAT BADGES -->
+    <div class="flex items-center gap-2 mb-4">
+      <div class="glass rounded-full px-3 py-1.5 flex items-center gap-1.5">
+        <svg class="icon" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
+        <span id="stat-total" class="text-xs font-bold text-white">0</span>
+        <span class="text-xs text-zinc-500">задач</span>
+      </div>
+      <div class="glass rounded-full px-3 py-1.5 flex items-center gap-1.5 ml-auto">
+        <svg class="icon" style="width:14px;height:14px;stroke:#10b981" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+        <span id="stat-done" class="text-xs font-bold text-white">0</span>
+        <span class="text-xs text-zinc-500">готово</span>
+      </div>
+    </div>
+
+    <!-- GOAL SCREEN -->
+    <section id="screen-home" class="fade-in">
+      <div class="mb-3">
+        <p class="text-xs uppercase tracking-widest text-zinc-500 font-semibold">Твоя цель</p>
+        <h1 id="goal-title" contenteditable="true" spellcheck="false"
+            class="text-xl font-extrabold text-white mt-1 outline-none focus:text-emerald-400 transition-colors break-words">
+          Моя главная цель
+        </h1>
+      </div>
+
+      <div class="relative rounded-3xl overflow-hidden p-8 flex flex-col items-center border border-white/10"
+           style="background: radial-gradient(circle at 25% 15%, rgba(16,185,129,0.30), transparent 55%), radial-gradient(circle at 85% 85%, rgba(14,165,233,0.22), transparent 55%), #101012;">
+        <div class="relative w-56 h-56">
+          <svg viewBox="0 0 200 200" class="w-full h-full -rotate-90">
+            <circle cx="100" cy="100" r="88" fill="none" stroke="#232326" stroke-width="14" />
+            <circle id="progress-ring" cx="100" cy="100" r="88" fill="none" stroke="#10b981"
+                    stroke-width="14" stroke-linecap="round"
+                    stroke-dasharray="553" stroke-dashoffset="553" class="ring-progress" />
+          </svg>
+          <div class="absolute inset-0 flex flex-col items-center justify-center">
+            <span id="progress-number" class="text-5xl font-extrabold text-white">0%</span>
+            <span class="text-xs text-zinc-500 font-semibold mt-1 uppercase tracking-wider">Прогресс</span>
+          </div>
+        </div>
+        <div class="badge-pulse mt-6 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/60 text-emerald-400 text-[11px] font-extrabold uppercase tracking-widest">
+          Kolesov
+        </div>
+        <p id="motivation-line" class="text-center text-sm text-zinc-400 mt-4 leading-relaxed px-2">
+          Никаких оправданий. Открой план и закрой задачу прямо сейчас.
+        </p>
+      </div>
+
+      <div class="mt-4 glass rounded-2xl p-5 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-500">
+            <svg class="icon" style="width:16px;height:16px" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
+          </div>
+          <div>
+            <p class="text-sm font-bold text-zinc-300">Дополнительные цели</p>
+            <p class="text-xs text-zinc-500 mt-0.5">Доступно в PRO-подписке</p>
+          </div>
+        </div>
+        <button class="text-xs font-bold px-3 py-2 rounded-xl bg-zinc-800 text-zinc-500">Скоро</button>
+      </div>
+    </section>
+
+    <!-- PLAN SCREEN -->
+    <section id="screen-plan" class="hidden fade-in">
+      <div class="flex items-center gap-2 mb-4">
+        <div class="flex-1 flex items-center gap-2 glass rounded-2xl px-4 py-3">
+          <svg class="icon text-zinc-500" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <input id="search-input" type="text" placeholder="Быстрый поиск"
+                 class="bg-transparent flex-1 outline-none text-sm placeholder-zinc-500 text-white" />
+        </div>
+        <button id="btn-add-task"
+                class="w-11 h-11 rounded-2xl bg-emerald-500 text-base-900 flex items-center justify-center shrink-0 active:scale-90 transition-transform shadow-glow">
+          <svg class="icon" style="stroke:#000" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
+
+      <div class="flex items-center gap-5 mb-4 text-sm font-bold" id="priority-tabs">
+        <button data-filter="all" class="filter-tab pb-1 border-b-2">Все</button>
+        <button data-filter="important" class="filter-tab pb-1 border-b-2">Важно</button>
+        <button data-filter="secondary" class="filter-tab pb-1 border-b-2">Второстепенно</button>
+      </div>
+
+      <div id="task-list" class="flex flex-col gap-3"></div>
+
+      <div id="empty-state" class="hidden text-center py-16">
+        <svg class="icon mx-auto mb-3 text-zinc-700" style="width:36px;height:36px" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        <p class="text-zinc-500 text-sm">Задач пока нет. Пока ты бездействуешь — время уходит.</p>
+      </div>
+    </section>
+
+    <!-- CRM SCREEN -->
+    <section id="screen-crm" class="hidden fade-in">
+      <div class="flex items-center justify-between mb-1">
+        <div>
+          <h1 class="text-xl font-extrabold text-white">CRM</h1>
+          <p class="text-xs text-zinc-500 mt-0.5">Marketing Agency Kolesov</p>
+        </div>
+        <button id="btn-add-client"
+                class="px-4 py-2.5 rounded-2xl bg-emerald-500 text-base-900 font-extrabold text-sm flex items-center gap-1.5 active:scale-95 transition-transform shadow-glow">
+          <svg class="icon" style="width:16px;height:16px;stroke:#000" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          Добавить лида
+        </button>
+      </div>
+
+      <div class="flex items-center gap-2 mt-4 mb-4 overflow-x-auto" id="crm-status-tabs">
+        <button data-status-filter="all" class="crm-tab shrink-0 px-3 py-1.5 rounded-full text-xs font-bold border">Все</button>
+        <button data-status-filter="new" class="crm-tab shrink-0 px-3 py-1.5 rounded-full text-xs font-bold border">Новый</button>
+        <button data-status-filter="in_progress" class="crm-tab shrink-0 px-3 py-1.5 rounded-full text-xs font-bold border">В работе</button>
+        <button data-status-filter="callback" class="crm-tab shrink-0 px-3 py-1.5 rounded-full text-xs font-bold border">Перезвонить</button>
+        <button data-status-filter="closed" class="crm-tab shrink-0 px-3 py-1.5 rounded-full text-xs font-bold border">Закрыт</button>
+      </div>
+
+      <div id="client-list" class="flex flex-col gap-3"></div>
+
+      <div id="crm-empty-state" class="hidden text-center py-16">
+        <svg class="icon mx-auto mb-3 text-zinc-700" style="width:36px;height:36px" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+        <p class="text-zinc-500 text-sm">Клиентов пока нет. Добавь первого лида.</p>
+      </div>
+    </section>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto px-4 pb-5 pt-2">
+    <div class="glass-strong rounded-full flex items-center gap-1 p-1.5">
+      <button data-screen="home" class="nav-btn flex-1 flex items-center justify-center gap-2 py-2.5 rounded-full transition-colors">
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.5" fill="currentColor"/></svg>
+        <span class="text-xs font-bold">Цель</span>
+      </button>
+      <button data-screen="plan" class="nav-btn flex-1 flex items-center justify-center gap-2 py-2.5 rounded-full transition-colors">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>
+        <span class="text-xs font-bold">План</span>
+      </button>
+      <button data-screen="crm" class="nav-btn flex-1 flex items-center justify-center gap-2 py-2.5 rounded-full transition-colors">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+        <span class="text-xs font-bold">CRM</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ADD TASK MODAL -->
+  <div id="modal-task" class="hidden fixed inset-0 z-50 flex items-end justify-center bg-black/70">
+    <div class="glass-strong w-full max-w-md rounded-t-3xl p-6 pb-8 fade-in">
+      <div class="w-10 h-1.5 bg-zinc-700 rounded-full mx-auto mb-5"></div>
+      <h2 class="text-lg font-bold text-white mb-4">Новая задача</h2>
+
+      <label class="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Название</label>
+      <input id="input-task-title" type="text" placeholder="Что нужно сделать?"
+             class="w-full mt-2 mb-4 bg-base-700/70 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-zinc-500 outline-none focus:border-emerald-500" />
+
+      <label class="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Дедлайн</label>
+      <input id="input-task-deadline" type="date"
+             class="w-full mt-2 mb-4 bg-base-700/70 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-emerald-500" />
+
+      <label class="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Приоритет</label>
+      <div class="flex gap-3 mt-2 mb-6">
+        <button data-priority="important" class="priority-btn flex-1 py-3 rounded-xl border font-bold text-sm">Важно</button>
+        <button data-priority="secondary" class="priority-btn flex-1 py-3 rounded-xl border font-bold text-sm">Второстепенно</button>
+      </div>
+
+      <div class="flex gap-3">
+        <button id="btn-cancel-task" class="flex-1 py-3 rounded-xl bg-zinc-800 text-zinc-300 font-bold text-sm">Отмена</button>
+        <button id="btn-save-task" class="flex-1 py-3 rounded-xl bg-emerald-500 text-base-900 font-extrabold text-sm shadow-glow">Добавить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD/EDIT CLIENT MODAL -->
+  <div id="modal-client" class="hidden fixed inset-0 z-50 flex items-end justify-center bg-black/70">
+    <div class="glass-strong w-full max-w-md rounded-t-3xl p-6 pb-8 fade-in max-h-[85vh] overflow-y-auto">
+      <div class="w-10 h-1.5 bg-zinc-700 rounded-full mx-auto mb-5"></div>
+      <h2 id="client-modal-title" class="text-lg font-bold text-white mb-4">Новый лид</h2>
+
+      <label class="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Контакт (имя / Telegram / телефон)</label>
+      <input id="input-client-contact" type="text" placeholder="Иван, @ivan, +7 900 000-00-00"
+             class="w-full mt-2 mb-4 bg-base-700/70 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-zinc-500 outline-none focus:border-emerald-500" />
+
+      <label class="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Дата и время созвона</label>
+      <input id="input-client-datetime" type="datetime-local"
+             class="w-full mt-2 mb-4 bg-base-700/70 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-emerald-500" />
+
+      <label class="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Статус</label>
+      <div class="grid grid-cols-2 gap-3 mt-2 mb-4">
+        <button data-status="new" class="client-status-btn py-3 rounded-xl border font-bold text-sm">Новый</button>
+        <button data-status="in_progress" class="client-status-btn py-3 rounded-xl border font-bold text-sm">В работе</button>
+        <button data-status="callback" class="client-status-btn py-3 rounded-xl border font-bold text-sm">Перезвонить</button>
+        <button data-status="closed" class="client-status-btn py-3 rounded-xl border font-bold text-sm">Закрыт</button>
+      </div>
+
+      <label class="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Описание</label>
+      <textarea id="input-client-description" rows="3" placeholder="Детали переговоров, запрос клиента..."
+                class="w-full mt-2 mb-6 bg-base-700/70 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-zinc-500 outline-none focus:border-emerald-500 resize-none"></textarea>
+
+      <div class="flex gap-3">
+        <button id="btn-cancel-client" class="flex-1 py-3 rounded-xl bg-zinc-800 text-zinc-300 font-bold text-sm">Отмена</button>
+        <button id="btn-save-client" class="flex-1 py-3 rounded-xl bg-emerald-500 text-base-900 font-extrabold text-sm shadow-glow">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

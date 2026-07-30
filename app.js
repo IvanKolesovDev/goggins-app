@@ -16,6 +16,14 @@ const MOTIVATION_LINES = [
 const ICON_CHECK = '<svg class="icon" style="width:14px;height:14px;stroke:#000" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>';
 const ICON_TRASH = '<svg class="icon" style="width:15px;height:15px" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6"/></svg>';
 const ICON_CALENDAR = '<svg class="icon" style="width:12px;height:12px" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>';
+const ICON_PHONE = '<svg class="icon" style="width:12px;height:12px" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>';
+
+const CLIENT_STATUSES = {
+  new: { label: "Новый", classes: "bg-sky-500/15 text-sky-400 border-sky-500/30" },
+  in_progress: { label: "В работе", classes: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
+  callback: { label: "Перезвонить", classes: "bg-purple-500/15 text-purple-400 border-purple-500/30" },
+  closed: { label: "Закрыт", classes: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
+};
 
 // ==== TELEGRAM WEBAPP ====
 const tg = window.Telegram ? window.Telegram.WebApp : null;
@@ -48,6 +56,7 @@ const USER_ID = getUserId();
 let state = {
   goal: { title: "Моя главная цель" },
   tasks: [],
+  clients: [],
 };
 
 let expandedTaskIds = new Set();
@@ -56,13 +65,20 @@ let activeFilter = "all";
 let searchQuery = "";
 let syncTimer = null;
 
+let selectedClientStatus = "new";
+let editingClientId = null;
+let activeCrmStatusFilter = "all";
+
 // ==== ЛОКАЛЬНОЕ ХРАНИЛИЩЕ ====
 function loadLocalState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw) {
     try {
       const parsed = JSON.parse(raw);
-      if (parsed && parsed.tasks) state = parsed;
+      if (parsed && parsed.tasks) {
+        state = parsed;
+        if (!state.clients) state.clients = [];
+      }
     } catch (e) {
       console.warn("Не удалось разобрать локальное состояние", e);
     }
@@ -80,7 +96,11 @@ async function fetchStateFromServer() {
     if (!res.ok) return;
     const data = await res.json();
     if (data && data.tasks) {
-      state = { goal: data.goal || state.goal, tasks: data.tasks };
+      state = {
+        goal: data.goal || state.goal,
+        tasks: data.tasks,
+        clients: data.clients || [],
+      };
       saveLocalState();
       renderAll();
     }
@@ -103,12 +123,13 @@ async function pushStateToServer() {
         user_id: USER_ID,
         goal_title: state.goal.title,
         tasks: state.tasks,
+        clients: state.clients,
       }),
     });
     if (res.ok) {
       const data = await res.json();
       if (data && data.tasks) {
-        state = { goal: data.goal, tasks: data.tasks };
+        state = { goal: data.goal, tasks: data.tasks, clients: data.clients || [] };
         saveLocalState();
         renderAll();
       }
@@ -145,7 +166,7 @@ function renderStats() {
   document.getElementById("stat-done").textContent = String(doneCount);
 }
 
-// ==== РЕНДЕР: ГЛАВНАЯ ====
+// ==== РЕНДЕР: ЦЕЛЬ ====
 function renderHome() {
   const titleEl = document.getElementById("goal-title");
   if (document.activeElement !== titleEl) {
@@ -177,6 +198,15 @@ function formatDeadline(deadline) {
   const d = new Date(deadline);
   if (isNaN(d.getTime())) return "";
   return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+}
+
+function formatCallDatetime(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return "";
+  const datePart = d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+  const timePart = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  return `${datePart}, ${timePart}`;
 }
 
 function getFilteredTasks() {
@@ -370,6 +400,112 @@ function generateLocalId() {
   return Date.now() + Math.floor(Math.random() * 1000);
 }
 
+// ==== РЕНДЕР: CRM ====
+function getFilteredClients() {
+  if (activeCrmStatusFilter === "all") return state.clients;
+  return state.clients.filter((c) => c.status === activeCrmStatusFilter);
+}
+
+function renderCrmTabs() {
+  document.querySelectorAll(".crm-tab").forEach((btn) => {
+    const active = btn.dataset.statusFilter === activeCrmStatusFilter;
+    btn.className = `crm-tab shrink-0 px-3 py-1.5 rounded-full text-xs font-bold border ${
+      active ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/50" : "border-white/10 text-zinc-500"
+    }`;
+  });
+}
+
+function renderCRM() {
+  renderCrmTabs();
+
+  const list = document.getElementById("client-list");
+  const emptyState = document.getElementById("crm-empty-state");
+  const filtered = getFilteredClients();
+  list.innerHTML = "";
+
+  if (filtered.length === 0) {
+    emptyState.classList.remove("hidden");
+    return;
+  }
+  emptyState.classList.add("hidden");
+
+  filtered.forEach((client) => {
+    const statusMeta = CLIENT_STATUSES[client.status] || CLIENT_STATUSES.new;
+    const callHtml = client.call_datetime
+      ? `<span class="text-[11px] text-zinc-500 font-semibold flex items-center gap-1">${ICON_CALENDAR} ${formatCallDatetime(client.call_datetime)}</span>`
+      : "";
+
+    const card = document.createElement("div");
+    card.className = "glass rounded-2xl p-4 fade-in";
+    card.innerHTML = `
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex items-center gap-2 min-w-0">
+          <div class="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-500 shrink-0">
+            ${ICON_PHONE}
+          </div>
+          <p class="font-bold text-white text-sm break-words">${escapeHtml(client.contact)}</p>
+        </div>
+        <button class="client-delete text-zinc-700 hover:text-red-400 px-1 shrink-0" data-client-id="${client.id}">${ICON_TRASH}</button>
+      </div>
+
+      <div class="flex items-center gap-2 mt-3 flex-wrap">
+        <select class="client-status-select text-[10px] font-bold px-2 py-1 rounded-lg border uppercase tracking-wide ${statusMeta.classes}" data-client-id="${client.id}">
+          ${Object.entries(CLIENT_STATUSES)
+            .map(
+              ([key, meta]) =>
+                `<option value="${key}" ${key === client.status ? "selected" : ""}>${meta.label}</option>`
+            )
+            .join("")}
+        </select>
+        ${callHtml}
+      </div>
+
+      ${
+        client.description
+          ? `<p class="text-xs text-zinc-400 mt-3 leading-relaxed break-words">${escapeHtml(client.description)}</p>`
+          : ""
+      }
+
+      <button class="client-edit-trigger w-full text-left mt-3 text-[11px] text-emerald-400 font-semibold" data-client-id="${client.id}">
+        Редактировать карточку
+      </button>
+    `;
+
+    list.appendChild(card);
+  });
+
+  attachCrmListeners();
+}
+
+function attachCrmListeners() {
+  document.querySelectorAll(".client-delete").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = Number(btn.dataset.clientId);
+      state.clients = state.clients.filter((c) => c.id !== id);
+      onStateChanged();
+      renderCRM();
+    });
+  });
+
+  document.querySelectorAll(".client-status-select").forEach((select) => {
+    select.addEventListener("change", () => {
+      const id = Number(select.dataset.clientId);
+      const client = state.clients.find((c) => c.id === id);
+      if (!client) return;
+      client.status = select.value;
+      onStateChanged();
+      renderCRM();
+    });
+  });
+
+  document.querySelectorAll(".client-edit-trigger").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = Number(btn.dataset.clientId);
+      openClientModal(id);
+    });
+  });
+}
+
 // ==== ОБЩИЙ ОБРАБОТЧИК ИЗМЕНЕНИЙ ====
 function onStateChanged() {
   saveLocalState();
@@ -384,12 +520,14 @@ function renderAll() {
   renderStats();
   renderHome();
   renderPlan();
+  renderCRM();
 }
 
 // ==== НАВИГАЦИЯ ====
 function showScreen(name) {
   document.getElementById("screen-home").classList.toggle("hidden", name !== "home");
   document.getElementById("screen-plan").classList.toggle("hidden", name !== "plan");
+  document.getElementById("screen-crm").classList.toggle("hidden", name !== "crm");
 
   document.querySelectorAll(".nav-btn").forEach((btn) => {
     const active = btn.dataset.screen === name;
@@ -399,13 +537,21 @@ function showScreen(name) {
 
   if (name === "home") renderHome();
   if (name === "plan") renderPlan();
+  if (name === "crm") renderCRM();
 }
 
 document.querySelectorAll(".nav-btn").forEach((btn) => {
   btn.addEventListener("click", () => showScreen(btn.dataset.screen));
 });
 
-// ==== ФИЛЬТРЫ И ПОИСК ====
+document.querySelectorAll(".crm-tab").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    activeCrmStatusFilter = btn.dataset.statusFilter;
+    renderCRM();
+  });
+});
+
+// ==== ФИЛЬТРЫ И ПОИСК (ПЛАН) ====
 document.querySelectorAll(".filter-tab").forEach((btn) => {
   btn.addEventListener("click", () => {
     activeFilter = btn.dataset.filter;
@@ -444,24 +590,24 @@ goalTitleEl.addEventListener("keydown", (e) => {
 });
 
 // ==== МОДАЛЬНОЕ ОКНО ДОБАВЛЕНИЯ ЗАДАЧИ ====
-const modal = document.getElementById("modal-task");
+const modalTask = document.getElementById("modal-task");
 const btnAddTask = document.getElementById("btn-add-task");
 const btnCancelTask = document.getElementById("btn-cancel-task");
 const btnSaveTask = document.getElementById("btn-save-task");
 const inputTitle = document.getElementById("input-task-title");
 const inputDeadline = document.getElementById("input-task-deadline");
 
-function openModal() {
+function openTaskModal() {
   inputTitle.value = "";
   inputDeadline.value = "";
   selectedPriority = "important";
   updatePriorityButtons();
-  modal.classList.remove("hidden");
+  modalTask.classList.remove("hidden");
   setTimeout(() => inputTitle.focus(), 100);
 }
 
-function closeModal() {
-  modal.classList.add("hidden");
+function closeTaskModal() {
+  modalTask.classList.add("hidden");
 }
 
 function updatePriorityButtons() {
@@ -482,9 +628,9 @@ document.querySelectorAll(".priority-btn").forEach((btn) => {
   });
 });
 
-btnAddTask.addEventListener("click", openModal);
-btnCancelTask.addEventListener("click", closeModal);
-modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
+btnAddTask.addEventListener("click", openTaskModal);
+btnCancelTask.addEventListener("click", closeTaskModal);
+modalTask.addEventListener("click", (e) => { if (e.target === modalTask) closeTaskModal(); });
 
 btnSaveTask.addEventListener("click", () => {
   const title = inputTitle.value.trim();
@@ -497,7 +643,93 @@ btnSaveTask.addEventListener("click", () => {
     done: false,
     subtasks: [],
   });
-  closeModal();
+  closeTaskModal();
+  onStateChanged();
+});
+
+// ==== МОДАЛЬНОЕ ОКНО ЛИДА (CRM) ====
+const modalClient = document.getElementById("modal-client");
+const btnAddClient = document.getElementById("btn-add-client");
+const btnCancelClient = document.getElementById("btn-cancel-client");
+const btnSaveClient = document.getElementById("btn-save-client");
+const inputClientContact = document.getElementById("input-client-contact");
+const inputClientDatetime = document.getElementById("input-client-datetime");
+const inputClientDescription = document.getElementById("input-client-description");
+const clientModalTitle = document.getElementById("client-modal-title");
+
+function updateClientStatusButtons() {
+  document.querySelectorAll(".client-status-btn").forEach((btn) => {
+    const active = btn.dataset.status === selectedClientStatus;
+    const meta = CLIENT_STATUSES[btn.dataset.status];
+    btn.className = `client-status-btn py-3 rounded-xl border font-bold text-sm ${
+      active ? meta.classes : "border-zinc-800 text-zinc-500"
+    }`;
+  });
+}
+
+document.querySelectorAll(".client-status-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    selectedClientStatus = btn.dataset.status;
+    updateClientStatusButtons();
+  });
+});
+
+function openClientModal(clientId) {
+  editingClientId = clientId || null;
+
+  if (editingClientId) {
+    const client = state.clients.find((c) => c.id === editingClientId);
+    if (!client) return;
+    clientModalTitle.textContent = "Редактировать лида";
+    inputClientContact.value = client.contact || "";
+    inputClientDatetime.value = client.call_datetime || "";
+    inputClientDescription.value = client.description || "";
+    selectedClientStatus = client.status || "new";
+  } else {
+    clientModalTitle.textContent = "Новый лид";
+    inputClientContact.value = "";
+    inputClientDatetime.value = "";
+    inputClientDescription.value = "";
+    selectedClientStatus = "new";
+  }
+
+  updateClientStatusButtons();
+  modalClient.classList.remove("hidden");
+  setTimeout(() => inputClientContact.focus(), 100);
+}
+
+function closeClientModal() {
+  modalClient.classList.add("hidden");
+  editingClientId = null;
+}
+
+btnAddClient.addEventListener("click", () => openClientModal(null));
+btnCancelClient.addEventListener("click", closeClientModal);
+modalClient.addEventListener("click", (e) => { if (e.target === modalClient) closeClientModal(); });
+
+btnSaveClient.addEventListener("click", () => {
+  const contact = inputClientContact.value.trim();
+  if (!contact) { inputClientContact.focus(); return; }
+
+  if (editingClientId) {
+    const client = state.clients.find((c) => c.id === editingClientId);
+    if (client) {
+      client.contact = contact;
+      client.call_datetime = inputClientDatetime.value || null;
+      client.status = selectedClientStatus;
+      client.description = inputClientDescription.value.trim();
+    }
+  } else {
+    state.clients.push({
+      id: generateLocalId(),
+      contact,
+      call_datetime: inputClientDatetime.value || null,
+      status: selectedClientStatus,
+      description: inputClientDescription.value.trim(),
+    });
+  }
+
+  closeClientModal();
   onStateChanged();
 });
 

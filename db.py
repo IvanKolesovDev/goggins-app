@@ -63,6 +63,20 @@ def init_db() -> None:
         )
         """
     )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS clients (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            contact TEXT NOT NULL,
+            call_datetime TEXT,
+            status TEXT NOT NULL DEFAULT 'new',
+            description TEXT,
+            position INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+        )
+        """
+    )
     conn.commit()
     conn.close()
 
@@ -171,6 +185,110 @@ def calc_progress(user_id: int) -> int:
     return progress
 
 
+# ==== КЛИЕНТЫ (CRM) ====
+
+def get_clients(user_id: int) -> List[Dict[str, Any]]:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT * FROM clients WHERE user_id = ? ORDER BY position ASC, id ASC",
+        (user_id,),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return [
+        {
+            "id": r["id"],
+            "contact": r["contact"],
+            "call_datetime": r["call_datetime"],
+            "status": r["status"],
+            "description": r["description"],
+        }
+        for r in rows
+    ]
+
+
+def add_client(
+    user_id: int,
+    contact: str,
+    call_datetime: Optional[str] = None,
+    status: str = "new",
+    description: Optional[str] = None,
+) -> int:
+    conn = get_connection()
+    cur = conn.cursor()
+    get_or_create_user(user_id)
+    cur.execute("SELECT COALESCE(MAX(position), -1) + 1 FROM clients WHERE user_id = ?", (user_id,))
+    next_position = cur.fetchone()[0]
+    cur.execute(
+        """
+        INSERT INTO clients (user_id, contact, call_datetime, status, description, position)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (user_id, contact, call_datetime, status, description, next_position),
+    )
+    conn.commit()
+    client_id = cur.lastrowid
+    conn.close()
+    return client_id
+
+
+def update_client(client_id: int, **fields: Any) -> None:
+    if not fields:
+        return
+    allowed = {"contact", "call_datetime", "status", "description", "position"}
+    updates = {k: v for k, v in fields.items() if k in allowed}
+    if not updates:
+        return
+    conn = get_connection()
+    cur = conn.cursor()
+    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    values = list(updates.values()) + [client_id]
+    cur.execute(f"UPDATE clients SET {set_clause} WHERE id = ?", values)
+    conn.commit()
+    conn.close()
+
+
+def delete_client(client_id: int) -> None:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM clients WHERE id = ?", (client_id,))
+    conn.commit()
+    conn.close()
+
+
+def update_client_status(client_id: int, status: str) -> None:
+    update_client(client_id, status=status)
+
+
+def sync_clients(user_id: int, clients: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    conn = get_connection()
+    cur = conn.cursor()
+    get_or_create_user(user_id)
+    cur.execute("DELETE FROM clients WHERE user_id = ?", (user_id,))
+    conn.commit()
+    for position, client in enumerate(clients):
+        cur.execute(
+            """
+            INSERT INTO clients (user_id, contact, call_datetime, status, description, position)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user_id,
+                client.get("contact", "Без имени"),
+                client.get("call_datetime"),
+                client.get("status", "new"),
+                client.get("description", ""),
+                position,
+            ),
+        )
+    conn.commit()
+    conn.close()
+    return get_clients(user_id)
+
+
+# ==== ПОЛНОЕ СОСТОЯНИЕ (ЦЕЛЬ + ЗАДАЧИ + КЛИЕНТЫ) ====
+
 def get_full_state(user_id: int) -> Dict[str, Any]:
     conn = get_connection()
     cur = conn.cursor()
@@ -211,21 +329,41 @@ def get_full_state(user_id: int) -> Dict[str, Any]:
 
     progress = _calc_progress_for_goal(cur, goal["id"])
 
+    cur.execute(
+        "SELECT * FROM clients WHERE user_id = ? ORDER BY position ASC, id ASC",
+        (user_id,),
+    )
+    client_rows = cur.fetchall()
+    clients = [
+        {
+            "id": c["id"],
+            "contact": c["contact"],
+            "call_datetime": c["call_datetime"],
+            "status": c["status"],
+            "description": c["description"],
+        }
+        for c in client_rows
+    ]
+
     state = {
         "goal": {"id": goal["id"], "title": goal["title"]},
         "tasks": tasks,
         "progress": progress,
+        "clients": clients,
     }
     conn.close()
     return state
 
 
 def sync_full_state(
-    user_id: int, goal_title: str, tasks: List[Dict[str, Any]]
+    user_id: int,
+    goal_title: str,
+    tasks: List[Dict[str, Any]],
+    clients: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
-    Полная синхронизация состояния плана пользователя.
-    Клиент присылает актуальный список задач/подзадач целиком,
+    Полная синхронизация состояния плана и CRM пользователя.
+    Клиент присылает актуальные списки задач/подзадач и клиентов целиком,
     бэкенд перезаписывает их и возвращает состояние с реальными ID.
     """
     conn = get_connection()
@@ -269,6 +407,24 @@ def sync_full_state(
                     subtask.get("title", "Без названия"),
                     1 if subtask.get("done") else 0,
                     s_position,
+                ),
+            )
+
+    if clients is not None:
+        cur.execute("DELETE FROM clients WHERE user_id = ?", (user_id,))
+        for position, client in enumerate(clients):
+            cur.execute(
+                """
+                INSERT INTO clients (user_id, contact, call_datetime, status, description, position)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    user_id,
+                    client.get("contact", "Без имени"),
+                    client.get("call_datetime"),
+                    client.get("status", "new"),
+                    client.get("description", ""),
+                    position,
                 ),
             )
 
