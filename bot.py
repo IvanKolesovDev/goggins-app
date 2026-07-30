@@ -237,8 +237,9 @@ async def handle_sync_state(request: web.Request) -> web.Response:
 
     goal_title = payload.get("goal_title", "Моя главная цель")
     tasks = payload.get("tasks", [])
+    clients = payload.get("clients", [])
 
-    state = db.sync_full_state(int(user_id), goal_title, tasks)
+    state = db.sync_full_state(int(user_id), goal_title, tasks, clients)
     return web.json_response(state, headers=_cors_headers())
 
 
